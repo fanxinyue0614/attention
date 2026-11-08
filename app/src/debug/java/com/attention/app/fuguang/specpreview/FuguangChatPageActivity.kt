@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import com.attention.app.fuguang.chat.FuguangChatPage
 import com.attention.app.fuguang.components.FuguangTheme
 import com.attention.app.fuguang.components.FuguangThemeName
 import com.attention.app.fuguang.components.fuguangRoles

@@ -1,4 +1,4 @@
-package com.attention.app.fuguang.specpreview
+package com.attention.app.fuguang.chat
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -46,7 +46,11 @@ import kotlinx.coroutines.launch
  * 「发出去 → 思考 → 回来 → 给建议」这条交互骨架。接真实推理是后续任务。
  */
 @Composable
-internal fun FuguangChatPage(modifier: Modifier = Modifier) {
+internal fun FuguangChatPage(
+    modifier: Modifier = Modifier,
+    showTabBar: Boolean = true,
+    applyWindowInsets: Boolean = true,
+) {
     val messages = remember {
         mutableStateListOf(
             ChatMessage.User(FuguangChatDemoData.userText),
@@ -70,10 +74,15 @@ internal fun FuguangChatPage(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            // 页面自己吃系统栏与输入法内边距：导航条不被状态栏压住，
-            // 输入区跟着键盘上移（配合 Manifest 的 adjustResize）。
-            .systemBarsPadding()
-            .imePadding(),
+            // 独立成屏时页面自己吃系统栏与输入法内边距；装进应用外壳后，内边距由
+            // 外壳的 Scaffold 提供，页面再加一次就会出现顶部与底部各一块空白。
+            .then(
+                if (applyWindowInsets) {
+                    Modifier.systemBarsPadding().imePadding()
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         // S1 导航条（内含 S2 目标胶囊）
         FuguangS1NavigationBar(
@@ -144,7 +153,11 @@ internal fun FuguangChatPage(modifier: Modifier = Modifier) {
                     }
                 },
             )
-            FuguangS5TabBar(selectedIndex = selectedTab, onSelect = { selectedTab = it })
+            // S5 只在「一屏一世界」的独立预览里出现：装进应用外壳后，
+            // 底部导航由外壳提供，页面再画一条就重复了。
+            if (showTabBar) {
+                FuguangS5TabBar(selectedIndex = selectedTab, onSelect = { selectedTab = it })
+            }
         }
     }
 }

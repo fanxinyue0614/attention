@@ -1,12 +1,12 @@
-package com.attention.app.fuguang.specpreview
+package com.attention.app.fuguang.chat
 
 import com.attention.app.fuguang.components.FuguangTextSegment
 
 /**
  * 对话页的示例数据。
  *
- * 只服务于 debug 预览：真实内容应当来自 Agent 运行结果与用户数据，不能写死在这里。
- * 措辞沿用「一周重排」原型的第一屏，方便和规范 P11 的样张逐句对照。
+ * 真实内容应当来自 Agent 运行结果与用户数据；在接入推理层之前，这里提供与
+ * 「一周重排」原型第一屏一致的措辞，方便和规范 P11 的样张逐句对照。
  */
 internal object FuguangChatDemoData {
     /** 名称槽：规范 P9 要求它是 prop，出厂值「浮光」，用户可改。 */
