@@ -37,7 +37,9 @@ fun FuguangO1BottomSheet(
 ) {
     val roles = fuguangRoles()
     val type = fuguangType()
-    Box(modifier = modifier.fillMaxWidth().height(520.dp)) {
+    // 页面浮层要盖满整屏：遮罩只盖住面板高度的话，上半屏没被压暗，
+    // 「停下来了」这个信号就散了。面板本身仍贴底、高度随内容。
+    Box(modifier = modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(roles.ink.copy(alpha = 0.18f)))
         Surface(
             modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
