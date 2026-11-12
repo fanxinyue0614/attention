@@ -54,9 +54,11 @@ fun FuguangT2Timeline(
             }
             blocks.forEach { block ->
                 val top = hourHeight * ((block.startMinute - startMinute).coerceAtLeast(0) / 60f)
-                val height = (hourHeight * ((block.endMinute - block.startMinute).coerceAtLeast(18) / 60f)).coerceAtLeast(18.dp)
+                val height = (hourHeight * ((block.endMinute - block.startMinute).coerceAtLeast(18) / 60f)).coerceAtLeast(MIN_BLOCK_HEIGHT)
                 FuguangT3ScheduleBlock(
                     block = block,
+                    compact = height <= MIN_BLOCK_HEIGHT + 0.5.dp,
+                    showSubtitle = height >= TWO_LINE_BLOCK_HEIGHT,
                     modifier = Modifier.fillMaxWidth(0.96f).offset(x = 11.dp, y = top).height(height),
                 )
             }
@@ -66,10 +68,18 @@ fun FuguangT2Timeline(
 
 private fun Dp.coerceAtLeast(minimum: Dp): Dp = if (this < minimum) minimum else this
 
+/** 规范 P12：最小时高 18；矮到这个高度时只留色条，不画文字。 */
+private val MIN_BLOCK_HEIGHT = 18.dp
+
+/** 一行标题 + 一行副行 + 上下内距大约需要的高度；不到这个高度就先丢副行。 */
+private val TWO_LINE_BLOCK_HEIGHT = 34.dp
+
 @Composable
 fun FuguangT3ScheduleBlock(
     block: FuguangScheduleBlockUi,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    showSubtitle: Boolean = true,
 ) {
     val type = fuguangType()
     val roles = fuguangRoles()
@@ -82,6 +92,9 @@ fun FuguangT3ScheduleBlock(
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(colors.bar))
+            // 矮块（含 18dp 下限的块）只留色条：硬塞文字会被块边框切掉，
+            // 规范 P12 也是这么定的（"矮到 18 时只留色条"）。
+            if (compact) return@Row
             Column(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 7.dp, vertical = 3.dp),
                 verticalArrangement = Arrangement.Center,
@@ -94,7 +107,7 @@ fun FuguangT3ScheduleBlock(
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (block.state == FuguangScheduleState.CANCELLED) TextDecoration.LineThrough else TextDecoration.None,
                 )
-                if (block.subtitle.isNotBlank()) {
+                if (block.subtitle.isNotBlank() && showSubtitle) {
                     Text(
                         block.subtitle,
                         style = type.t95.copy(fontSize = 8.5.sp),

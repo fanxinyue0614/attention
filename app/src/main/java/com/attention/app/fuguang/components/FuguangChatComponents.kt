@@ -2,6 +2,7 @@ package com.attention.app.fuguang.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,11 +17,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +77,11 @@ fun FuguangC2AiBubble(
     val roles = fuguangRoles()
     val type = fuguangType()
     val dims = fuguangDims()
+    // 折叠是纯呈现状态（不跨屏共享、不进业务模型），因此留在组件内：
+    // 规范 P11 要求「超长折叠」，而不是把多出来的段落直接丢掉。
+    var expanded by remember(segments) { mutableStateOf(false) }
+    val overflow = segments.size > COLLAPSED_SEGMENT_LIMIT
+    val visible = if (expanded) segments else segments.take(COLLAPSED_SEGMENT_LIMIT)
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showAvatar) {
             FuguangC1Avatar(state = avatarState, image = avatarImage, initial = avatarInitial)
@@ -86,13 +97,26 @@ fun FuguangC2AiBubble(
                 modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                segments.take(4).forEach { segment ->
+                visible.forEach { segment ->
                     Text(bubbleText(segment, roles.mainDeep), style = type.t135, color = roles.ink)
+                }
+                if (overflow) {
+                    Text(
+                        text = if (expanded) "收起" else "展开全部 ${segments.size} 段",
+                        style = type.t95,
+                        color = roles.mainDeep,
+                        modifier = Modifier
+                            .clickable { expanded = !expanded }
+                            .testTag("bubble-expand"),
+                    )
                 }
             }
         }
     }
 }
+
+/** 折叠阈值：超过 4 段就收起，与规范 P11「正文超过 4 行要折叠」一致。 */
+private const val COLLAPSED_SEGMENT_LIMIT = 4
 
 @Composable
 fun FuguangC3UserBubble(
