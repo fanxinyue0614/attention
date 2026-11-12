@@ -3,11 +3,14 @@ package com.attention.app.fuguang.chat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,6 +19,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +47,9 @@ import com.attention.app.fuguang.components.FuguangS3InputArea
 import com.attention.app.fuguang.components.FuguangS5TabBar
 import com.attention.app.fuguang.components.FuguangStateMode
 import com.attention.app.fuguang.components.FuguangTextSegment
+import com.attention.app.fuguang.components.FuguangW1WeekSwipe
+import com.attention.app.fuguang.components.fuguangRoles
+import com.attention.app.fuguang.components.fuguangType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -79,6 +87,8 @@ internal fun FuguangChatPage(
     var adjustment by remember { mutableStateOf(FuguangChatDemoData.adjustmentCard) }
     var sheetOpen by remember { mutableStateOf(false) }
     var selectedRelocation by remember { mutableStateOf(FuguangChatDemoData.relocationOptions.first().id) }
+    var weekOpen by remember { mutableStateOf(false) }
+    var weekIndex by remember { mutableStateOf(WEEK_DEFAULT_INDEX) }
     var turn by remember { mutableStateOf(0) }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
@@ -269,15 +279,46 @@ internal fun FuguangChatPage(
                 options = FuguangChatDemoData.relocationOptions,
                 selectedId = selectedRelocation,
                 onSelect = { selectedRelocation = it },
+                // 规范 P8：落点定案不能回单日页，要先看到七天全景（06）
                 onConfirm = {
                     sheetOpen = false
-                    messages += ChatItem.Receipt(
-                        text = "已应用 ${adjustment.items.count { it.accepted }} 项调整",
-                        time = "刚刚",
-                    )
+                    weekOpen = true
                 },
                 onCancel = { sheetOpen = false },
             )
+        }
+
+        // 06 整周详细：落点定案后必须看到七天全景（规范 P8「为什么没有 05→03」）
+        if (weekOpen) {
+            Box(Modifier.fillMaxSize().background(fuguangRoles().ink.copy(alpha = 0.18f))) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                    color = fuguangRoles().paper,
+                ) {
+                    Column(modifier = Modifier.padding(PAGE_HORIZONTAL)) {
+                        Text("改好的这周", style = fuguangType().t17, color = fuguangRoles().ink)
+                        Text("左右滑动看七天", style = fuguangType().t11, color = fuguangRoles().ink3)
+                        FuguangW1WeekSwipe(
+                            days = FuguangChatDemoData.weekDays,
+                            selectedIndex = weekIndex,
+                            onSelectedChange = { weekIndex = it },
+                        )
+                        FuguangB1Button(
+                            label = "就这么定",
+                            kind = FuguangButtonKind.PRIMARY,
+                            onClick = {
+                                weekOpen = false
+                                messages += ChatItem.Receipt(
+                                    text = "已应用 ${adjustment.items.count { it.accepted }} 项调整",
+                                    time = "刚刚",
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("week-confirm"),
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -299,6 +340,7 @@ private data class ThinkingState(val label: String, val loading: Boolean)
 private const val THINKING_MILLIS = 900L
 private const val DONE_MILLIS = 500L
 private const val CHAT_TAB_INDEX = 0
+private const val WEEK_DEFAULT_INDEX = 2
 private val PAGE_HORIZONTAL = 16.dp
 private const val THINKING_PROGRESS = "正在核对这周的空档…"
 private const val THINKING_DONE = "已核对 12 个空闲段"

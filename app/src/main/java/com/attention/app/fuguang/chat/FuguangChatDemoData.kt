@@ -6,6 +6,8 @@ import com.attention.app.fuguang.components.FuguangComparisonRowUi
 import com.attention.app.fuguang.components.FuguangFeishuCardUi
 import com.attention.app.fuguang.components.FuguangRelocationOptionUi
 import com.attention.app.fuguang.components.FuguangTextSegment
+import com.attention.app.fuguang.components.FuguangWeekDayCardUi
+import com.attention.app.fuguang.components.FuguangWeekEntryUi
 
 /**
  * 对话页的示例数据。
@@ -130,4 +132,20 @@ internal object FuguangChatDemoData {
             cost = "跨周，本周雅思写作记 0 小时",
         ),
     )
-}
+
+    /** W1 的七张日卡：确认落点之后给用户看「改好的这周」。 */
+    val weekDays = listOf(
+        weekDay("mon", "周一", "11.2", "3h 30m", listOf(entry("e1", "09:00", "10:40", "管理会计", "二主楼 B301"), entry("e2", "19:30", "21:00", "雅思精听", "图书馆 4F"))),
+        weekDay("tue", "周二", "11.3", "2h 40m", listOf(entry("e3", "14:00", "16:40", "FA2", "改到周四"))),
+        weekDay("wed", "周三", "11.4", "5h 20m", listOf(entry("e4", "08:00", "09:40", "听力精听", "图书馆", false), entry("e5", "16:10", "17:10", "概率论 第三单元", "课后"), entry("e6", "19:30", "21:00", "雅思写作", "图书馆", true))),
+        weekDay("thu", "周四", "11.5", "3h 00m", listOf(entry("e7", "09:00", "10:40", "管理会计 MA", "三教 402"), entry("e8", "21:00", "21:30", "行测复盘", "寝室"))),
+        weekDay("fri", "周五", "11.6", "4h 10m", listOf(entry("e9", "10:00", "11:40", "FA2 改期", "二主楼 B301", true), entry("e10", "19:30", "21:00", "雅思听力", "图书馆"))),
+        weekDay("sat", "周六", "11.7", "4h 00m", listOf(entry("e11", "10:00", "12:00", "雅思模考", "图书馆"), entry("e12", "18:00", "19:00", "全英群面", "线上", true))),
+        weekDay("sun", "周日", "11.8", "1h 00m", listOf(entry("e13", "21:00", "22:00", "本周复盘", "寝室"))),
+    )
+
+    private fun entry(id: String, start: String, end: String, title: String, location: String, isNew: Boolean = false) =
+        FuguangWeekEntryUi(id = id, start = start, end = end, title = title, location = location, isNew = isNew)
+
+    private fun weekDay(id: String, weekday: String, date: String, totalLabel: String, entries: List<FuguangWeekEntryUi>) =
+        FuguangWeekDayCardUi(id = id, weekday = weekday, date = date, totalLabel = totalLabel, entries = entries)}
