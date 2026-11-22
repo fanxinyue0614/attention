@@ -49,7 +49,7 @@ class FuguangChatConversationTest {
         rule.onNodeWithTag("input-s3").performTextInput("帮我记 25 分钟阅读")
         rule.onNodeWithTag("send-s4").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("已经记下 25 分钟阅读").fetchSemanticsNodes().isNotEmpty
+            rule.onAllNodesWithText("已经记下 25 分钟阅读").fetchSemanticsNodes().isNotEmpty()
         }
 
         assertEquals(listOf("帮我记 25 分钟阅读"), conversation.requests)
@@ -68,7 +68,7 @@ class FuguangChatConversationTest {
         rule.onNodeWithTag("input-s3").performTextInput("查一下目标")
         rule.onNodeWithTag("send-s4").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("我没能完成这次请求:接口返回 HTTP 500").fetchSemanticsNodes().isNotEmpty
+            rule.onAllNodesWithText("我没能完成这次请求:接口返回 HTTP 500").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -84,7 +84,7 @@ class FuguangChatConversationTest {
         rule.onNodeWithTag("input-s3").performTextInput("帮我记 25 分钟阅读")
         rule.onNodeWithTag("send-s4").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("你的数据还在读取").fetchSemanticsNodes().isNotEmpty
+            rule.onAllNodesWithText("你的数据还在读取").fetchSemanticsNodes().isNotEmpty()
         }
 
         assertEquals(emptyList<String>(), conversation.requests)
