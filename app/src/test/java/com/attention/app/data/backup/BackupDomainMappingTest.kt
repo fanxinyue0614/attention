@@ -325,6 +325,9 @@ class BackupDomainMappingTest {
                     occurredAtEpochMillis = 1_700_000_000_000L,
                     note = "记录备注",
                     scheduleEntryId = schedule.id,
+                    // 构造器不校验「补记标识只配 MANUAL」的组合（那条规则在引擎入口），
+                    // 这里只关心字段值被搬运；source 已被压到非默认值，标识也一并压上。
+                    backfillRequestId = "backfill-once",
                 ),
             ),
             schedules = listOf(schedule),

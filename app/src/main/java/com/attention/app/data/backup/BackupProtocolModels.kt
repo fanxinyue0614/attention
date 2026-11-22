@@ -95,6 +95,8 @@ data class BackupTimeEntry(
     val occurredAtEpochMillis: Long? = null,
     val note: String = "",
     val scheduleEntryId: String? = null,
+    /** 事后补记这一次提交意图的标识（幂等键），语义与领域同名字段一致；缺字段的旧备份读成 null。 */
+    val backfillRequestId: String? = null,
 )
 
 /** 日程条目：用户安排在某个规划日要做的事。与时间记录不是一回事。 */

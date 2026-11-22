@@ -154,6 +154,7 @@ internal fun TimeEntry.toProtocol(): BackupTimeEntry = BackupTimeEntry(
     occurredAtEpochMillis = occurredAtEpochMillis,
     note = note,
     scheduleEntryId = scheduleEntryId,
+    backfillRequestId = backfillRequestId,
 )
 
 internal fun BackupTimeEntry.toDomain(): TimeEntry = TimeEntry(
@@ -165,6 +166,7 @@ internal fun BackupTimeEntry.toDomain(): TimeEntry = TimeEntry(
     occurredAtEpochMillis = occurredAtEpochMillis,
     note = note,
     scheduleEntryId = scheduleEntryId,
+    backfillRequestId = backfillRequestId,
 )
 
 internal fun ScheduleEntry.toProtocol(): BackupScheduleEntry = BackupScheduleEntry(
