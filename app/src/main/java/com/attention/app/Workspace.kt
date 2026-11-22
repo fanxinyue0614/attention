@@ -59,6 +59,7 @@ import com.attention.app.agent.rememberWorkspaceAgentRuntime
 import com.attention.app.data.AttentionStateRepository
 import com.attention.app.data.RoomAttentionStateRepository
 import com.attention.app.data.backup.BackupCommitResult
+import com.attention.app.fuguang.chat.AgentConversation
 import com.attention.app.fuguang.chat.FuguangChatPage
 import com.attention.app.fuguang.components.FuguangTheme
 import com.attention.app.fuguang.components.FuguangThemeName
@@ -630,8 +631,10 @@ fun WorkspaceApp(openScheduleDate: String? = null, openScheduleId: String? = nul
     }
     val viewModel: AttentionViewModel = viewModel(factory = WorkspaceViewModelFactory(repository))
     // 助手运行时在组合根一处装配(ADR-0009 写入点):审计与快照只挂在包装通道上,
-    // 手动派发路径零改动;本票不接任何 UI 触发,#230 注入 Reasoner、对话页接线后 run 才可达。
-    rememberWorkspaceAgentRuntime(repository = repository, viewModel = viewModel)
+    // 手动派发路径零改动;对话页经会话入口调用 run,「状态加载完成前不得运行」
+    // 由对话页按 stateLoaded 把关(#248 记录在案的约束在此落地)。
+    val agentRuntime = rememberWorkspaceAgentRuntime(repository = repository, viewModel = viewModel)
+    val agentStateLoaded by viewModel.stateLoaded.collectAsStateWithLifecycle()
     val investmentActions: InvestmentActions = viewModel
     val settingsPlanningActions: SettingsPlanningActions = viewModel
     val onboardingPlanningActions: OnboardingPlanningActions = viewModel
@@ -1161,7 +1164,12 @@ fun WorkspaceApp(openScheduleDate: String? = null, openScheduleId: String? = nul
                 LaunchDestination.CHAT -> FuguangTheme(theme = FuguangThemeName.GILDED) {
                     // 外壳已经提供底部导航与系统栏内边距，页面不再自带：
                     // 否则会出现两条底栏和上下各多一块空白。
-                    FuguangChatPage(showTabBar = false, applyWindowInsets = false)
+                    FuguangChatPage(
+                        showTabBar = false,
+                        applyWindowInsets = false,
+                        conversation = AgentConversation { request -> agentRuntime.run(request) },
+                        stateReady = agentStateLoaded,
+                    )
                 }
                 // 「日程」与兜底落在同一页：「日程」是合并后的页面，它承载当前规划日、今天、
                 // 明天、所有日期与任意规划日；旧入口值 TODAY / ALL_DATES 由领域的兼容映射折进来

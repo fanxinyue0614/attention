@@ -50,39 +50,59 @@ import com.attention.app.fuguang.components.FuguangTextSegment
 import com.attention.app.fuguang.components.FuguangW1WeekSwipe
 import com.attention.app.fuguang.components.fuguangRoles
 import com.attention.app.fuguang.components.fuguangType
+import com.attention.agent.AgentOutcome
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * 主 Agent 对话页（设计稿第 4 页）。
  *
- * 这一版把「一周重排」那条完整链路走通，用到的族：
- * S 骨架（导航/输入/发送/标签栏）、C 对话（气泡/思考/回执/建议/时间分隔）、
- * K 卡片（调整卡/飞书卡/对比条）、O 弹层（三个落点）、B 按钮、A 状态（空态）。
+ * 两种模式,由 [conversation] 决定:
+ * - **真模型模式**([conversation] 非 null):发送的请求经会话入口到达助手运行时
+ *   (`WorkspaceAgentRuntime.run`),终态映射为答复气泡;消息从空开始,建议胶囊不出现,
+ *   「一周重排」的 K1/K2/K3/O1 剧本不走。模型未配置时运行时以 Failed 收敛,
+ *   页面把失败原因原样讲给用户——宁可明说不可用,不静默降级。
+ * - **演示模式**([conversation] 为 null,debug 独立入口与组件验收用):
+ *   按「一周重排」剧本演完整链路。用到的族:S 骨架(导航/输入/发送/标签栏)、
+ *   C 对话(气泡/思考/回执/建议/时间分隔)、K 卡片(调整卡/飞书卡/对比条)、
+ *   O 弹层(三个落点)、B 按钮、A 状态(空态)。
  *
- * 页面自己不实现任何视觉数值：颜色、字号、尺寸全部来自 `FuguangDesignTokens`，
+ * 页面自己不实现任何视觉数值:颜色、字号、尺寸全部来自 `FuguangDesignTokens`,
  * 页面只负责「装在哪、什么时候出现」。
  *
- * 链路：发送 → C4 思考 → C2 答复 + K1 调整卡 → 采纳 → K2 飞书卡 + K3 对比条
- * → B1「帮我找位置」→ O1 落点弹层 → C5 回执行。
- * S1 的「更多」是「开新对话」：清空消息后落到 A1 空态（规范要求空态必须有出口）。
+ * S1 的「更多」是「开新对话」:清空消息后落到 A1 空态(规范要求空态必须有出口)。
  */
 @Composable
 internal fun FuguangChatPage(
     modifier: Modifier = Modifier,
     showTabBar: Boolean = true,
     applyWindowInsets: Boolean = true,
+    conversation: AgentConversation? = null,
+    stateReady: Boolean = true,
 ) {
+    val liveMode = conversation != null
     val messages = remember {
-        mutableStateListOf(
-            ChatItem.User(FuguangChatDemoData.userText),
-            ChatItem.Agent(FuguangChatDemoData.agentRecognition),
-            ChatItem.Agent(FuguangChatDemoData.agentConstraint),
-        )
+        mutableStateListOf<ChatItem>().apply {
+            if (!liveMode) {
+                addAll(
+                    listOf(
+                        ChatItem.User(FuguangChatDemoData.userText),
+                        ChatItem.Agent(FuguangChatDemoData.agentRecognition),
+                        ChatItem.Agent(FuguangChatDemoData.agentConstraint),
+                    ),
+                )
+            }
+        }
     }
     var composer by remember { mutableStateOf("") }
     var thinking by remember { mutableStateOf<ThinkingState?>(null) }
-    var suggestions by remember { mutableStateOf(FuguangChatDemoData.suggestions) }
+    var suggestions by remember { mutableStateOf(if (liveMode) emptyList() else FuguangChatDemoData.suggestions) }
+    // 会话时间戳:真模型用打开对话那一刻的真实时刻,演示模式用剧本的固定时刻。
+    val sessionStamp = remember(liveMode) {
+        if (liveMode) "今天 ${LocalTime.now().format(STAMP_TIME_FORMAT)}" else FuguangChatDemoData.sessionStamp
+    }
     var selectedTab by remember { mutableStateOf(CHAT_TAB_INDEX) }
     var adjustment by remember { mutableStateOf(FuguangChatDemoData.adjustmentCard) }
     var sheetOpen by remember { mutableStateOf(false) }
@@ -97,7 +117,7 @@ internal fun FuguangChatPage(
         scroll.animateScrollTo(scroll.maxValue)
     }
 
-    /** 一次 Agent 回话：先思考再落地，落地后给出下一轮建议。 */
+    /** 一次 Agent 回话：先思考再落地，落地后给出下一轮建议。(演示模式专用) */
     fun reply(build: () -> List<ChatItem>) {
         suggestions = emptyList()
         thinking = ThinkingState(THINKING_PROGRESS, loading = true)
@@ -108,6 +128,33 @@ internal fun FuguangChatPage(
             messages += build()
             thinking = null
             suggestions = FuguangChatDemoData.suggestions
+        }
+    }
+
+    /**
+     * 真模型模式的一次对话:用户气泡先落地,C4 转圈等运行时终态,终态映射成答复气泡。
+     * 上一轮未结束前忽略新的发送(不排队);状态未加载完时把请求挡在本地,
+     * 不让模型对着一份空状态做决定。
+     */
+    fun ask(text: String) {
+        if (thinking != null) return
+        if (!stateReady) {
+            messages += ChatItem.Agent(FuguangTextSegment(text = STATE_NOT_READY_HINT))
+            return
+        }
+        messages += ChatItem.User(text)
+        composer = ""
+        suggestions = emptyList()
+        thinking = ThinkingState(LIVE_THINKING, loading = true)
+        val entry = requireNotNull(conversation) { "ask 只在真模型模式下被调用" }
+        scope.launch {
+            // 运行时承诺仅协程取消时抛出;这里再兜一层,任何意外都折算成对用户可读的失败。
+            val outcome = runCatching { entry.ask(text) }
+                .getOrElse { failure ->
+                    AgentOutcome.Failed(failure.message ?: failure.javaClass.simpleName, emptyList())
+                }
+            thinking = null
+            messages += ChatItem.Agent(FuguangTextSegment(text = outcome.toReplyText()))
         }
     }
 
@@ -132,8 +179,10 @@ internal fun FuguangChatPage(
                 pendingCount = adjustment.items.count { it.accepted }.takeIf { adjustment.status == "待确认" },
                 onMore = {
                     messages.clear()
-                    adjustment = FuguangChatDemoData.adjustmentCard
-                    suggestions = FuguangChatDemoData.suggestions
+                    if (!liveMode) {
+                        adjustment = FuguangChatDemoData.adjustmentCard
+                        suggestions = FuguangChatDemoData.suggestions
+                    }
                 },
             )
 
@@ -159,7 +208,7 @@ internal fun FuguangChatPage(
                         .padding(horizontal = PAGE_HORIZONTAL),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    FuguangC7TimestampDivider(FuguangChatDemoData.sessionStamp)
+                    FuguangC7TimestampDivider(sessionStamp)
                     messages.forEachIndexed { index, item ->
                         when (item) {
                             is ChatItem.User -> FuguangC3UserBubble(
@@ -246,19 +295,23 @@ internal fun FuguangChatPage(
                     onSend = {
                         val text = composer.trim()
                         if (text.isNotEmpty()) {
-                            messages += ChatItem.User(text)
-                            composer = ""
-                            turn += 1
-                            val first = turn == 1
-                            reply {
-                                if (first) {
-                                    // 第一次请求：认出要挪什么，并给出 K1 调整卡
-                                    listOf(
-                                        ChatItem.Agent(FuguangChatDemoData.agentRecognition),
-                                        ChatItem.Proposal(adjustment),
-                                    )
-                                } else {
-                                    listOf(ChatItem.Agent(FuguangChatDemoData.agentConstraint))
+                            if (liveMode) {
+                                ask(text)
+                            } else {
+                                messages += ChatItem.User(text)
+                                composer = ""
+                                turn += 1
+                                val first = turn == 1
+                                reply {
+                                    if (first) {
+                                        // 第一次请求：认出要挪什么，并给出 K1 调整卡
+                                        listOf(
+                                            ChatItem.Agent(FuguangChatDemoData.agentRecognition),
+                                            ChatItem.Proposal(adjustment),
+                                        )
+                                    } else {
+                                        listOf(ChatItem.Agent(FuguangChatDemoData.agentConstraint))
+                                    }
                                 }
                             }
                         }
@@ -334,6 +387,27 @@ private sealed interface ChatItem {
     data class Receipt(val text: String, val time: String) : ChatItem
 }
 
+/**
+ * 对话页的会话入口:一次请求换一个领域终态。
+ * 生产装配由组合根用 `WorkspaceAgentRuntime.run` 实现;传 null 即演示模式。
+ */
+internal fun interface AgentConversation {
+    suspend fun ask(request: String): AgentOutcome
+}
+
+/**
+ * 助手终态到答复气泡文本的映射。答复原样透出;失败与预算耗尽翻译成
+ * 用户能读懂、也讲清后果的话——失败原因里没有密钥与请求体(运行时已保证),
+ * 原样展示是「宁可明说不可用」的最小实现。
+ */
+internal fun AgentOutcome.toReplyText(): String = when (this) {
+    is AgentOutcome.Answered -> text
+    is AgentOutcome.Failed -> "我没能完成这次请求:$reason"
+    is AgentOutcome.BudgetExhausted -> "这次的思考预算用完了,还没有得出结果。换个更具体的说法再试一次?"
+    is AgentOutcome.PendingConfirmation ->
+        "这个操作需要你确认后才会执行,确认卡片还没有上线,这次没有做任何改动。"
+}
+
 /** C4 的两种状态：进行中（转圈）与完成（勾，文案不变灰）。 */
 private data class ThinkingState(val label: String, val loading: Boolean)
 
@@ -344,3 +418,6 @@ private const val WEEK_DEFAULT_INDEX = 2
 private val PAGE_HORIZONTAL = 16.dp
 private const val THINKING_PROGRESS = "正在核对这周的空档…"
 private const val THINKING_DONE = "已核对 12 个空闲段"
+private const val LIVE_THINKING = "浮光正在想…"
+private const val STATE_NOT_READY_HINT = "你的数据还在读取,稍等一下再发,免得我对着一份空状态做决定。"
+private val STAMP_TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
