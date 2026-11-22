@@ -108,9 +108,10 @@ object BackupProtocolPayloads {
             container = BackupPayloadContainer.LIST,
             kind = BackupPayloadKind.PROTOCOL_RECORD,
             wireFields = "id, planningDate, durationMinutes, targetId, source, occurredAtEpochMillis, " +
-                "note, scheduleEntryId",
+                "note, scheduleEntryId, backfillRequestId",
             reason = "时间记录是实际投入的事实本身，也是投入经验与达成里程碑的唯一来源。" +
-                "它才是这份备份存在的理由。",
+                "它才是这份备份存在的理由。backfillRequestId 是补记的幂等键：恢复后同一次提交的" +
+                "重放只会命中已有记录，不会重复记账。",
         ),
         BackupPayload(
             field = "schedules",
