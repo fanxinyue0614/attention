@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.attention.domain.ScheduleFrequency
 import com.attention.workspace.state.AgendaRecurrenceDraft
+import com.attention.workspace.state.AgendaBackfillDraft
 import com.attention.workspace.state.AgendaScheduleDraft
 import java.time.LocalDate
 
@@ -86,6 +87,78 @@ internal class AgendaScheduleForm {
         note = ""
         targetId = null
         error = null
+    }
+}
+
+/** 页面共用的事后补记时长编辑器；分钟部分只接受 5 分钟步进。 */
+internal class AgendaBackfillForm {
+    var hours by mutableStateOf("")
+        private set
+    var minutes by mutableStateOf("")
+        private set
+    var error: String? by mutableStateOf(null)
+        private set
+    private var initialized by mutableStateOf(false)
+
+    fun initialize(defaultMinutes: Int) {
+        if (initialized) return
+        setTotal(defaultMinutes.coerceAtLeast(5))
+        initialized = true
+    }
+
+    fun setPreset(totalMinutes: Int) {
+        setTotal(totalMinutes)
+        error = null
+    }
+
+    fun changeHours(value: String) {
+        hours = value
+        error = null
+    }
+
+    fun changeMinutes(value: String) {
+        minutes = value
+        error = null
+    }
+
+    fun totalMinutes(): Int? {
+        val hourValue = hours.trim().toIntOrNull() ?: return null
+        val minuteValue = minutes.trim().toIntOrNull() ?: return null
+        return (hourValue * 60 + minuteValue).takeIf { it > 0 && minuteValue in 0..55 && minuteValue % 5 == 0 }
+    }
+
+    fun validate(): String? {
+        val hourValue = hours.trim().toIntOrNull()
+        val minuteValue = minutes.trim().toIntOrNull()
+        return when {
+            hourValue == null || hourValue < 0 -> "请输入有效的小时"
+            minuteValue == null || minuteValue !in 0..55 || minuteValue % 5 != 0 -> "分钟必须是 0 到 55 之间的 5 分钟步进"
+            hourValue * 60 + minuteValue < 5 -> "实际投入至少为 5 分钟"
+            else -> null
+        }
+    }
+
+    fun validateAndShowError(): Boolean {
+        error = validate()
+        return error == null
+    }
+
+    fun toDraft(targetId: String?, note: String = ""): AgendaBackfillDraft = AgendaBackfillDraft(
+        durationMinutes = totalMinutes() ?: error("事后补记时长尚未校验"),
+        targetId = targetId,
+        note = note,
+    )
+
+    fun reset() {
+        hours = ""
+        minutes = ""
+        error = null
+        initialized = false
+    }
+
+    private fun setTotal(totalMinutes: Int) {
+        hours = (totalMinutes / 60).toString()
+        minutes = (totalMinutes % 60).toString()
     }
 }
 
@@ -179,6 +252,9 @@ internal class AgendaRecurrenceForm {
 internal fun rememberAgendaScheduleForm(): AgendaScheduleForm = remember { AgendaScheduleForm() }
 
 @Composable
+internal fun rememberAgendaBackfillForm(): AgendaBackfillForm = remember { AgendaBackfillForm() }
+
+@Composable
 internal fun rememberAgendaRecurrenceForm(): AgendaRecurrenceForm = remember { AgendaRecurrenceForm() }
 
 /** 新建日程的表单输入。校验与迁移前逐条一致，页面在提交前先给出同样的提示。 */
@@ -202,6 +278,18 @@ internal fun parseScheduleMinute(value: String, allowEndOfDay: Boolean = false):
     val hour = parts[0].toIntOrNull() ?: return null
     val minute = parts[1].toIntOrNull() ?: return null
     return if ((hour in 0..23 && minute in 0..59) || (allowEndOfDay && hour == 24 && minute == 0)) hour * 60 + minute else null
+}
+
+/**
+ * 开始与结束时间共同决定的时段长度。
+ *
+ * 只有两端都是有效时刻、且结束晚于开始时才有值。表单用它把「时间段」和
+ * 「预计时长」收敛成一个时长来源：时段成立时时长由时段决定，否则才读预计时长。
+ */
+internal fun scheduleTimeRangeMinutes(startText: String, endText: String): Int? {
+    val start = parseScheduleMinute(startText) ?: return null
+    val end = parseScheduleMinute(endText, allowEndOfDay = true) ?: return null
+    return (end - start).takeIf { it > 0 }
 }
 
 internal fun validateScheduleForm(input: ScheduleFormInput): String? = when {
@@ -243,7 +331,13 @@ internal fun validateRecurrenceForm(
     else -> null
 }
 
-/** 把新建日程表单解析成草稿；解析与校验都已在提交前完成。 */
+/**
+ * 把新建日程表单解析成草稿；解析与校验都已在提交前完成。
+ *
+ * 时间段与预计时长是两个独立字段：有固定时段也可以填计划投入，没有时段也能只填
+ * 计划投入。预计时长留空时，领域 [com.attention.domain.plannedMinutes] 会回退到
+ * 完整时间段的长度，因此不会出现两个互相覆盖的输入。
+ */
 internal fun AgendaScheduleForm.toDraft(planningDate: LocalDate): AgendaScheduleDraft = AgendaScheduleDraft(
     planningDate = planningDate.toString(),
     title = title,

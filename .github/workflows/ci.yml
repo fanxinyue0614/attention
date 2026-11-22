@@ -47,7 +47,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests, lint, and assembleDebug
-        run: ./gradlew --no-daemon test lintDebug assembleDebug
+        run: ./gradlew --no-daemon test lintDebug assembleDebug :agent:koverVerify
 
       - name: Upload verification reports
         if: ${{ !cancelled() }}
@@ -59,6 +59,10 @@ jobs:
             app/build/reports
             app/build/test-results
             domain/build/test-results
+            agent/build/test-results
+            domain/build/reports/kover
+            workspace-state/build/reports/kover
+            agent/build/reports/kover
             app/build/outputs/apk/debug
 
   instrumentation:

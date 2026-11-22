@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    // 仅出报告,不设阈值：领域模块的覆盖目标尚未裁决
+    alias(libs.plugins.kover)
 }
 
 kotlin {

@@ -18,3 +18,4 @@ rootProject.name = "attention"
 include(":app")
 include(":domain")
 include(":workspace-state")
+include(":agent")

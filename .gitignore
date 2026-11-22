@@ -7,3 +7,4 @@ local.properties
 .codex-worktree-setup.log
 .Codex/environments/
 .kotlin/
+.worktrees/

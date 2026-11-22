@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    // 仅出报告,不设阈值：页面状态模块的覆盖目标尚未裁决
+    alias(libs.plugins.kover)
 }
 
 kotlin {
