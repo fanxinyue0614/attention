@@ -47,36 +47,58 @@ internal object AgentPrompt {
         request: String,
         history: List<AgentEvent>,
         tools: List<ToolDescriptor>,
+        nowText: String? = null,
     ): List<ChatMessage> = listOf(
         ChatMessage(ChatMessage.SYSTEM, systemPrompt(tools)),
-        ChatMessage(ChatMessage.USER, userMessage(request, history)),
+        ChatMessage(ChatMessage.USER, userMessage(request, history, nowText)),
     )
 
     fun systemPrompt(tools: List<ToolDescriptor>): String = buildString {
-        appendLine("你是「注意力」App 内置的时间管理助手。你帮助用户查询和修改目标、日程、时间记录与计时。")
+        appendLine("你是「注意力」App 内置的时间管理助手，帮助用户查询和修改目标、时间记录与计时。")
+        appendLine("你只能通过下面列出的工具读取或修改数据。")
+        appendLine()
+        appendLine("## 输出格式（必须严格遵守）")
+        appendLine("整条回复必须是一个 JSON 对象：第一个字符是 {，最后一个字符是 }。")
+        appendLine("不能有任何前言、解释、说明文字，也不能用 Markdown 代码块包裹。")
+        appendLine("两种形态二选一：")
+        appendLine()
+        appendLine("1) 调用工具：")
+        append("""{"thought":"一句话说明为什么调用","action":{"tool":"工具名","args":{}}}""")
+        appendLine()
+        appendLine("例如用户说「记 25 分钟阅读」：")
+        append(
+            """{"thought":"用户要补记 25 分钟阅读","action":{"tool":"record_time","args":{"action":"backfill","planningDate":"2026-11-21","durationMinutes":25}}}""",
+        )
+        appendLine()
+        appendLine()
+        appendLine("2) 直接回答：")
+        append("""{"thought":"可选","answer":"给用户的答复"}""")
+        appendLine()
+        appendLine()
+        appendLine("每一轮只输出一个 JSON 对象、只调用一个工具。工具的执行结果会出现在下一轮消息里。")
         appendLine()
         appendLine("## 可用工具")
         appendLine(renderTools(tools))
-        appendLine()
-        appendLine("## 回复格式")
-        appendLine("每次回复必须是一个 JSON 对象，不要输出任何其他文字、Markdown 代码块或注释。")
-        append("""- 需要调用工具：{"thought": "为什么调用它", "action": {"tool": "工具名", "args": {}}}""")
-        appendLine()
-        append("""- 可以回答用户：{"thought": "可选", "answer": "给用户的答复"}""")
-        appendLine()
-        appendLine("一轮只调用一个工具；工具执行结果会出现在下一条消息里。")
-        appendLine()
         appendLine("## 规则")
-        appendLine("1. 只能使用「可用工具」里列出的工具名与参数，不要编造。")
-        appendLine("2. 参数必须符合对应工具的 JSON Schema；信息不足时先向用户确认。")
-        appendLine("3. 不要编造数据；需要的事实用工具查询。")
-        appendLine("4. 用中文回答用户。")
-        appendLine("5. 用户没有明确要求的破坏性操作不要执行。")
+        appendLine("1. 只能使用上面列出的工具名与参数，不得编造。")
+        appendLine("2. 需要任何数据（目标、时间记录、计时状态）时，必须先调用对应查询工具，不要凭空回答。")
+        appendLine("3. 用户明确要求记录或修改时，直接调用对应工具，不要反问。")
+        appendLine("4. 参数里需要 targetId 时，先调用 query_targets 查到真实 id 再用；**标题不是 id**，不要把标题填进 targetId。")
+        appendLine("5. 参数必须符合工具的 JSON Schema；日期一律用 YYYY-MM-DD。")
+        appendLine("6. 用中文回答用户。")
+        appendLine("7. 用户没有明确要求的破坏性操作不要执行。")
+        appendLine()
+        appendLine("再次强调：只输出 JSON 对象本身，不要输出其他任何内容。")
     }
 
-    fun userMessage(request: String, history: List<AgentEvent>): String = buildString {
+    fun userMessage(request: String, history: List<AgentEvent>, nowText: String? = null): String = buildString {
         appendLine("用户请求：")
         appendLine(request)
+        if (!nowText.isNullOrBlank()) {
+            appendLine()
+            // 模型没有系统时钟：补记、查询都要落在具体日期上，今天几号必须在 prompt 里给出。
+            appendLine("当前时间：$nowText")
+        }
         appendLine()
         appendLine("本次运行已发生的事件（按时间顺序，JSON 数组；可能为空）：")
         append(encodeHistory(history))

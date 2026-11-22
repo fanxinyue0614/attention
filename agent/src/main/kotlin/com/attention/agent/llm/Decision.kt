@@ -46,8 +46,20 @@ internal object DecisionParser {
 
             action is JsonObject -> parseAction(action, thought)
 
+            // 小模型常把 action 直接写成工具名（{"action":"record_time","args":{...}}）：
+            // 语义与 {"action":{"tool":..}} 完全等价，按行动处理，理由由 thought 承载
+            action is JsonPrimitive && action.isString ->
+                parseAction(
+                    JsonObject(mapOf("tool" to action, "args" to (root["args"] ?: JsonObject(emptyMap())))),
+                    thought,
+                )
+
             answer is JsonPrimitive && answer.isString ->
                 ReasonerDecision.Answer(thought = thought, text = answer.content)
+
+            // 小模型偶发省略 action 外壳，直接给 {"tool":..,"args":..}：语义无歧义，按行动处理
+            root["tool"] is JsonPrimitive ->
+                parseAction(root, thought)
 
             else -> throw InvalidModelResponseException("模型回复既没有 action 也没有 answer")
         }

@@ -97,6 +97,23 @@ class DecisionParserTest {
         assertRejected("""[{"answer":"x"}]""")
     }
 
+    @Test
+    fun an_action_given_as_a_tool_name_string_is_still_an_act() {
+        val act = DecisionParser.parse(
+            """{"thought":"记一笔","action":"record_time","args":{"durationMinutes":25}}""",
+        ) as ReasonerDecision.Act
+
+        assertEquals("record_time", act.action.tool)
+        assertEquals("25", (act.action.args["durationMinutes"] as JsonPrimitive).content)
+    }
+
+    @Test
+    fun a_bare_tool_and_args_object_is_still_an_act() {
+        val act = DecisionParser.parse("""{"tool":"query_timer","args":{}}""") as ReasonerDecision.Act
+
+        assertEquals("query_timer", act.action.tool)
+    }
+
     private fun assertRejected(raw: String) {
         val thrown = runCatching { DecisionParser.parse(raw) }.exceptionOrNull()
         assertTrue("应当拒绝：$raw", thrown is InvalidModelResponseException)

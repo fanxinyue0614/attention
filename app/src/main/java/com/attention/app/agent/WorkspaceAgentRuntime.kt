@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.attention.app.AttentionViewModel
+import com.attention.app.BuildConfig
 import com.attention.app.data.AttentionStateRepository
 import com.attention.app.data.audit.AiChangeAudit
 import com.attention.app.data.audit.createAiChangeAudit
@@ -93,9 +94,8 @@ class WorkspaceAgentRuntime(
     private val gate = ConfirmationGate(executor, clockSource)
 
     private val catalog = ToolCatalog(
-        tools = readOnlyTools ?: WorkspaceTools(source).all(),
-        changeTools = changeTools
-            ?: listOf(ManageTargetTool(source), SetGoalTool(source), RecordTimeTool(source), TimerControlTool(source)),
+        tools = readOnlyTools ?: defaultReadOnlyTools(source),
+        changeTools = changeTools ?: defaultChangeTools(source),
         executor = executor,
         clock = clockSource,
         gate = gate,
@@ -142,9 +142,12 @@ class WorkspaceAgentRuntime(
  * 派发通道一行委托仓库的 executeCommand,审计门面走既有工厂,
  * WorkspaceSource 读 ViewModel 已暴露的最新状态(StateFlow.value 形态)。
  *
+ * 模型配置来自 debug 变体的 BuildConfig(仓库根 `local.properties` / 环境变量)，
+ * 三项缺任意一项即视为未配置:回落到 [ReasonerNotBound]，运行入口以 Failed 收敛，
+ * 不静默降级成「没有模型的助手」。
+ *
  * 「状态加载完成前不得运行助手」的约束记录在案,由对话线负责把关——
- * 本票不接任何 UI 触发入口,run 在生产装配下不可达;#230 注入真实 Reasoner、
- * 对话页接线后,这里不需要再改动。
+ * 本票不接任何 UI 触发入口,run 在生产装配下不可达;对话页接线后这里不再改动。
  */
 @Composable
 internal fun rememberWorkspaceAgentRuntime(
@@ -153,10 +156,37 @@ internal fun rememberWorkspaceAgentRuntime(
 ): WorkspaceAgentRuntime {
     val context = LocalContext.current
     return remember(repository) {
+        val runtimeState = { viewModel.state.value }
+        val source = WorkspaceSource { WorkspaceView(runtimeState(), Instant.now(), ZoneId.systemDefault()) }
+        // 推理器与执行目录共用同一份工具清单：prompt 里描述的工具就是能真正派发的工具。
+        val readOnlyTools = defaultReadOnlyTools(source)
+        val changeTools = defaultChangeTools(source)
+        val reasoner = buildOpenAiCompatReasoner(
+            baseUrl = BuildConfig.LLM_BASE_URL,
+            model = BuildConfig.LLM_MODEL,
+            apiKey = BuildConfig.LLM_API_KEY,
+            readOnlyTools = readOnlyTools,
+            changeTools = changeTools,
+        ) ?: ReasonerNotBound
+
         WorkspaceAgentRuntime(
             dispatch = CommandExecutor { command, now, zone -> repository.executeCommand(command, now, zone) },
             audit = context.createAiChangeAudit(),
-            state = { viewModel.state.value },
+            state = runtimeState,
+            reasoner = reasoner,
+            readOnlyTools = readOnlyTools,
+            changeTools = changeTools,
         )
     }
 }
+
+/** 生产装配的只读工具清单;推理器与执行目录共用，避免两份描述漂移。 */
+internal fun defaultReadOnlyTools(source: WorkspaceSource): List<AgentTool> = WorkspaceTools(source).all()
+
+/** 生产装配的变更工具清单;同上。 */
+internal fun defaultChangeTools(source: WorkspaceSource): List<ChangeTool> = listOf(
+    ManageTargetTool(source),
+    SetGoalTool(source),
+    RecordTimeTool(source),
+    TimerControlTool(source),
+)
