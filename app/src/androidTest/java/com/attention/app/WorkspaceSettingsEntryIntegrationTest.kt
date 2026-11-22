@@ -48,13 +48,14 @@ class WorkspaceSettingsEntryIntegrationTest {
     val settingsBarrier = WorkspaceHostSettingsBarrier.quiesceAfterActivity
 
     @Test
-    fun the_bottom_bar_has_only_the_three_workspaces_and_no_settings_entry() {
-        // 设置不再是顶级入口：底部只有日程、目标树、统计三项
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+    fun the_bottom_bar_has_only_the_four_workspaces_and_no_settings_entry() {
+        // 设置不再是顶级入口：底部只有日程、目标树、统计、对话四项
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
 
         composeRule.onNodeWithTag("nav-agenda").assert(hasText("日程"))
         composeRule.onNodeWithTag("nav-targets").assert(hasText("目标树"))
         composeRule.onNodeWithTag("nav-statistics").assert(hasText("统计"))
+        composeRule.onNodeWithTag("nav-chat").assert(hasText("对话"))
         composeRule.onAllNodes(hasSettingsNavEntry()).assertCountEquals(0)
     }
 

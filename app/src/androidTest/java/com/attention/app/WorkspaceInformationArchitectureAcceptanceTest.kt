@@ -46,7 +46,7 @@ import org.junit.runner.RunWith
  * 看得见的标签与图标、可访问的选中态、以及业务集合在引导前后的不变。
  * 具体色值与布局由 #126 的视觉决策约束，这里不断言像素。
  *
- * 1. [the_bottom_bar_shows_only_the_three_workspaces_with_labels_icons_and_an_accessible_selection]
+ * 1. [the_bottom_bar_shows_only_the_four_workspaces_with_labels_icons_and_an_accessible_selection]
  * 2. [the_day_ranges_and_an_arbitrary_planning_day_never_create_another_top_level_entry]
  * 3. [the_workspace_navigation_and_the_guide_change_no_business_data]
  * 4. [the_timer_backup_and_aggregation_capabilities_still_reach_the_user_through_the_new_navigation]
@@ -64,22 +64,22 @@ class WorkspaceInformationArchitectureAcceptanceTest {
     val settingsBarrier = WorkspaceHostSettingsBarrier.quiesceAfterActivity
 
     /**
-     * 验收标准 1：底部导航只出现日程、目标树、统计三项，中文标签始终可见，
+     * 验收标准 1：底部导航只出现日程、目标树、统计、对话四项，中文标签始终可见，
      * 图标与选中态可访问。
      */
     @Test
-    fun the_bottom_bar_shows_only_the_three_workspaces_with_labels_icons_and_an_accessible_selection() {
-        // 底部只有三个入口：今天/明天/所有日期、设置都不在这里
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+    fun the_bottom_bar_shows_only_the_four_workspaces_with_labels_icons_and_an_accessible_selection() {
+        // 底部只有四个入口：今天/明天/所有日期、设置都不在这里
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
 
         // 中文标签在每一项上都可见，并且不被裁掉
-        listOf("nav-agenda" to "日程", "nav-targets" to "目标树", "nav-statistics" to "统计").forEach { (tag, label) ->
+        listOf("nav-agenda" to "日程", "nav-targets" to "目标树", "nav-statistics" to "统计", "nav-chat" to "对话").forEach { (tag, label) ->
             composeRule.onNodeWithTag(tag).assert(hasText(label))
             composeRule.onNodeWithText(label).assertIsDisplayed()
         }
 
         // 每一项都有一个与标签同名的图标语义：图标不是纯装饰，且可被读屏念出
-        listOf("日程", "目标树", "统计").forEach { label ->
+        listOf("日程", "目标树", "统计", "对话").forEach { label ->
             val icons = composeRule.onAllNodes(hasContentDescription(label), useUnmergedTree = true).fetchSemanticsNodes()
             assertEquals("$label 需要一个同名图标语义", 1, icons.size)
         }
@@ -89,7 +89,7 @@ class WorkspaceInformationArchitectureAcceptanceTest {
         assertEquals(false, selectedOf("nav-targets"))
         assertEquals(false, selectedOf("nav-statistics"))
 
-        // 切到目标树与统计后，选中态跟着走，且三项都仍然可点（可点语义而非纯展示）
+        // 切到目标树与统计后，选中态跟着走，且各项都仍然可点（可点语义而非纯展示）
         composeRule.onNodeWithTag("nav-targets").performClick()
         composeRule.waitForIdle()
         assertEquals(false, selectedOf("nav-agenda"))
@@ -98,7 +98,7 @@ class WorkspaceInformationArchitectureAcceptanceTest {
         composeRule.onNodeWithTag("nav-statistics").performClick()
         composeRule.waitForIdle()
         assertEquals(true, selectedOf("nav-statistics"))
-        composeRule.onAllNodes(hasNavTagPrefix() and hasClickAction()).assertCountEquals(3)
+        composeRule.onAllNodes(hasNavTagPrefix() and hasClickAction()).assertCountEquals(4)
         composeRule.onNodeWithText("日程").assertIsDisplayed()
         composeRule.onNodeWithText("目标树").assertIsDisplayed()
     }
@@ -109,7 +109,7 @@ class WorkspaceInformationArchitectureAcceptanceTest {
     @Test
     fun the_day_ranges_and_an_arbitrary_planning_day_never_create_another_top_level_entry() {
         // 三个范围是日程页日期菜单里的筛选，不是三个顶级入口
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
         composeRule.onNodeWithTag("agenda-date-menu", useUnmergedTree = true).performScrollTo().performClick()
         composeRule.onNodeWithTag("agenda-range-today", useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithTag("agenda-range-tomorrow", useUnmergedTree = true).assertIsDisplayed()
@@ -119,13 +119,13 @@ class WorkspaceInformationArchitectureAcceptanceTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("agenda-filter").assert(hasText("筛选：规划日 $TOMORROW"))
         // 选了明天之后底部入口数不变，日程仍然处于选中态
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
         assertEquals(true, selectedOf("nav-agenda"))
 
         composeRule.onNodeWithTag("agenda-date-menu", useUnmergedTree = true).performScrollTo().performClick()
         composeRule.onNodeWithTag("agenda-range-all-dates", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
         assertEquals(true, selectedOf("nav-agenda"))
 
         // 任意规划日：仍然只是日程页上的一个筛选
@@ -135,12 +135,13 @@ class WorkspaceInformationArchitectureAcceptanceTest {
         composeRule.onNodeWithTag("agenda-open-planning-day", useUnmergedTree = true).performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("agenda-filter").assert(hasText("筛选：规划日 $FAR_DATE"))
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
         assertEquals(true, selectedOf("nav-agenda"))
 
-        // 底层标签仍然是那三项：没有多出第四项，也没有把范围换名成顶级入口
+        // 底层标签仍然是那四项：没有多出第五项，也没有把范围换名成顶级入口
         composeRule.onNodeWithTag("nav-targets").assert(hasText("目标树"))
         composeRule.onNodeWithTag("nav-statistics").assert(hasText("统计"))
+        composeRule.onNodeWithTag("nav-chat").assert(hasText("对话"))
     }
 
     /**
