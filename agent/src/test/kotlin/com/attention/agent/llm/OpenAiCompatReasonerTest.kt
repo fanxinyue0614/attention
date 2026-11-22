@@ -192,18 +192,14 @@ class OpenAiCompatReasonerTest {
 
     @Test
     fun the_budget_accumulates_across_the_steps_of_one_run() = runBlocking {
-        val tools = AgentPrompt.descriptors(listOf(QueryTool()), emptyList())
-        val firstStepEstimate = AgentPrompt.estimateTokens(AgentPrompt.messages("请求", emptyList(), tools))
         server.enqueue(MockResponse().setBody(completion("""{"answer":"好的"}""")))
-        val subject = reasoner(budget = firstStepEstimate)
+        // 第一步的 prompt 约几百 token，1000 够用；第二步塞进超长轨迹后必然超限。
+        val subject = reasoner(budget = 1_000)
 
-        // 第一步刚好在预算内
         subject.reason("请求", emptyList())
 
-        // 第二步轨迹变长，估算超过同一次运行的累计上限：不发请求
-        val failure = failureOf {
-            subject.reason("请求", listOf(AgentEvent.Thought("第一轮")))
-        }
+        val hugeHistory = listOf(AgentEvent.Thought("前情".repeat(4_000)))
+        val failure = failureOf { subject.reason("请求", hugeHistory) }
 
         assertTrue(failure is TokenBudgetExceededException)
         assertEquals(1, server.requestCount)
@@ -222,15 +218,36 @@ class OpenAiCompatReasonerTest {
     fun a_second_run_starts_its_own_budget() = runBlocking {
         server.enqueue(MockResponse().setBody(completion("""{"answer":"一"}""")))
         server.enqueue(MockResponse().setBody(completion("""{"answer":"二"}""")))
-        val tools = AgentPrompt.descriptors(listOf(QueryTool()), emptyList())
-        val firstStepEstimate = AgentPrompt.estimateTokens(AgentPrompt.messages("请求", emptyList(), tools))
-        val subject = reasoner(budget = firstStepEstimate)
+        // 单次调用的 prompt 远小于 1000；若预算没有在运行边界重置，第二次就会失败。
+        val subject = reasoner(budget = 1_000)
 
         subject.reason("请求", emptyList())
         // 新一次运行以空轨迹开始，预算重新计算，因此还能再发一次
         val answer = subject.reason("请求", emptyList()) as ReasonerDecision.Answer
 
         assertEquals("二", answer.text)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun an_invalid_reply_gets_one_repair_round_before_the_decision_is_accepted() = runBlocking {
+        server.enqueue(MockResponse().setBody(completion("好的，我这就去办")))
+        server.enqueue(MockResponse().setBody(completion("""{"answer":"已完成"}""")))
+
+        val answer = reasoner().reason("请求", emptyList()) as ReasonerDecision.Answer
+
+        assertEquals("已完成", answer.text)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun two_invalid_replies_in_a_row_are_still_rejected() = runBlocking {
+        server.enqueue(MockResponse().setBody(completion("好的，我这就去办")))
+        server.enqueue(MockResponse().setBody(completion("还是不行")))
+
+        val failure = failureOf { reasoner().reason("请求", emptyList()) }
+
+        assertTrue(failure is InvalidModelResponseException)
         assertEquals(2, server.requestCount)
     }
 

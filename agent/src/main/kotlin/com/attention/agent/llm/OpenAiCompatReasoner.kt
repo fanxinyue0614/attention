@@ -7,6 +7,10 @@ import com.attention.agent.Reasoner
 import com.attention.agent.ReasonerDecision
 import com.attention.agent.TokenBudgetExceededException
 import java.io.IOException
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -31,7 +35,17 @@ internal data class ChatCompletionRequest(
     val model: String,
     val messages: List<ChatMessage>,
     val temperature: Double = 0.0,
+    /** OpenAI 兼容的 JSON 模式；不支持的端点会忽略或 400，由调用方决定是否降级。 */
+    @SerialName("response_format")
+    val responseFormat: ResponseFormat? = null,
 )
+
+@Serializable
+internal data class ResponseFormat(val type: String) {
+    companion object {
+        val JSON_OBJECT = ResponseFormat("json_object")
+    }
+}
 
 @Serializable
 internal data class ChatCompletionResponse(
@@ -68,6 +82,9 @@ class OpenAiCompatReasoner(
     private val config: OpenAiCompatConfig,
     readOnlyTools: List<AgentTool> = emptyList(),
     changeTools: List<ChangeTool> = emptyList(),
+    /** 时钟与时区每次请求现取：模型需要知道「今天几号」，不能停在构造那一刻。 */
+    private val now: () -> Instant = Instant::now,
+    private val zone: () -> ZoneId = ZoneId::systemDefault,
     private val client: OkHttpClient = defaultHttpClient(config),
 ) : Reasoner {
     private val tools = AgentPrompt.descriptors(readOnlyTools, changeTools)
@@ -81,7 +98,7 @@ class OpenAiCompatReasoner(
         mutex.withLock {
             if (history.isEmpty()) usedPromptTokens = 0
 
-            val messages = AgentPrompt.messages(request, history, tools)
+            val messages = AgentPrompt.messages(request, history, tools, nowText = currentTimeText())
             val estimate = AgentPrompt.estimateTokens(messages)
             if (usedPromptTokens + estimate > config.promptTokenBudget) {
                 throw TokenBudgetExceededException(
@@ -92,14 +109,44 @@ class OpenAiCompatReasoner(
 
             val content = withContext(Dispatchers.IO) { complete(messages) }
             usedPromptTokens += estimate
-            DecisionParser.parse(content)
+            val decision = runCatching { DecisionParser.parse(content) }.getOrNull()
+            if (decision != null) return@withLock decision
+
+            // 小模型偶尔不守 JSON 格式。给它一次修复机会：把不合法的那条回复原样带回去，
+            // 明确要求「只输出 JSON」。仍不合法才交回循环收敛为 Failed——不猜测、不拼凑。
+            val repaired = repairMessages(messages, content)
+            val repairedEstimate = AgentPrompt.estimateTokens(repaired)
+            if (usedPromptTokens + repairedEstimate > config.promptTokenBudget) {
+                throw TokenBudgetExceededException(
+                    estimatedTokens = usedPromptTokens + repairedEstimate,
+                    budget = config.promptTokenBudget,
+                )
+            }
+            val second = withContext(Dispatchers.IO) { complete(repaired) }
+            usedPromptTokens += repairedEstimate
+            DecisionParser.parse(second)
         }
+
+    /**
+     * 修复回合的消息：保留原对话，把不合法的回复作为 assistant 轮带回，再用一条 user 指令
+     * 要求只输出 JSON。截断到 2000 字符，避免把超长废话整段再发一遍。
+     */
+    private fun repairMessages(original: List<ChatMessage>, badReply: String): List<ChatMessage> =
+        original + listOf(
+            ChatMessage("assistant", badReply.take(2_000)),
+            ChatMessage(ChatMessage.USER, "你上面的回复不是合法 JSON。请只输出一个 JSON 对象，不要有任何其他文字或代码块标记。"),
+        )
 
     /** 发一次请求，返回模型消息正文；一切失败都折算成上面两类异常。 */
     private fun complete(messages: List<ChatMessage>): String {
         val payload = json.encodeToString(
             ChatCompletionRequest.serializer(),
-            ChatCompletionRequest(model = config.model, messages = messages),
+            ChatCompletionRequest(
+                model = config.model,
+                messages = messages,
+                // 强约束：模型必须回一个 JSON 对象。实测 glm-4-flash 不加这个会夹带解释文字。
+                responseFormat = ResponseFormat.JSON_OBJECT,
+            ),
         )
         val request = Request.Builder()
             .url(config.chatCompletionsUrl)
@@ -138,6 +185,10 @@ class OpenAiCompatReasoner(
     private companion object {
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
+
+    /** 给模型看的「现在」：日期 + 星期 + 时刻 + 时区，让补记与查询落在正确日期上。 */
+    private fun currentTimeText(): String =
+        TIME_FORMATTER.format(now().atZone(zone()))
 }
 
 /** 按配置建客户端：超时来自配置，读超时故意给得比连接久（模型生成本来就慢）。 */
@@ -146,3 +197,7 @@ internal fun defaultHttpClient(config: OpenAiCompatConfig): OkHttpClient =
         .connectTimeout(config.connectTimeoutMillis, TimeUnit.MILLISECONDS)
         .readTimeout(config.readTimeoutMillis, TimeUnit.MILLISECONDS)
         .build()
+
+/** 2026-11-21 星期六 22:40 这种形态；中文模型对这个格式最不容易读错。 */
+private val TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE HH:mm", Locale.CHINA)
