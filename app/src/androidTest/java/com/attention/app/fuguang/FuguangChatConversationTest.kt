@@ -1,6 +1,6 @@
 package com.attention.app.fuguang
 
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -22,6 +22,9 @@ import org.junit.runner.RunWith
  * 真模型模式下对话页与运行时终态的接线:
  * 发送的用户请求原样到达会话入口,终态映射成答复气泡;
  * 状态未加载完时请求被挡在本地,不打到会话入口。
+ *
+ * 气泡文本按 substring 匹配:气泡里的强调分段会让整句被拆成多个文本节点,
+ * 精确等值匹配不可靠;答复位于滚动列表底部,断言存在即可,不要求此刻滚进视口。
  */
 @RunWith(AndroidJUnit4::class)
 class FuguangChatConversationTest {
@@ -49,11 +52,11 @@ class FuguangChatConversationTest {
         rule.onNodeWithTag("input-s3").performTextInput("帮我记 25 分钟阅读")
         rule.onNodeWithTag("send-s4").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("已经记下 25 分钟阅读").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithText("已经记下 25 分钟阅读", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
 
         assertEquals(listOf("帮我记 25 分钟阅读"), conversation.requests)
-        rule.onNodeWithText("帮我记 25 分钟阅读").assertIsDisplayed()
+        rule.onNodeWithText("帮我记 25 分钟阅读", substring = true).assertExists()
     }
 
     @Test
@@ -68,7 +71,7 @@ class FuguangChatConversationTest {
         rule.onNodeWithTag("input-s3").performTextInput("查一下目标")
         rule.onNodeWithTag("send-s4").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("我没能完成这次请求:接口返回 HTTP 500").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithText("我没能完成这次请求", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -84,7 +87,7 @@ class FuguangChatConversationTest {
         rule.onNodeWithTag("input-s3").performTextInput("帮我记 25 分钟阅读")
         rule.onNodeWithTag("send-s4").performClick()
         rule.waitUntil(10_000) {
-            rule.onAllNodesWithText("你的数据还在读取").fetchSemanticsNodes().isNotEmpty()
+            rule.onAllNodesWithText("你的数据还在读取", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
 
         assertEquals(emptyList<String>(), conversation.requests)
