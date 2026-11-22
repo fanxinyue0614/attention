@@ -52,14 +52,15 @@ class WorkspaceAgendaNavigationIntegrationTest {
     val settingsBarrier = WorkspaceHostSettingsBarrier.quiesceAfterActivity
 
     @Test
-    fun the_bottom_bar_has_three_workspaces_with_icons_labels_and_a_selected_semantic() {
-        // #173 把设置从主导航退出：底部只有日程、目标树、统计三个工作区入口，
-        // 设置改从统计页底部的「设置与数据」进入；今天/明天/所有日期仍不产生额外顶级入口
-        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(3)
+    fun the_bottom_bar_has_four_workspaces_with_icons_labels_and_a_selected_semantic() {
+        // #173 把设置从主导航退出，#234 把对话升为顶级工作区：底部有日程、目标树、统计、对话四个入口，
+        // 设置仍在统计页底部的「设置与数据」；今天/明天/所有日期仍不产生额外顶级入口
+        composeRule.onAllNodes(hasNavTagPrefix()).assertCountEquals(4)
 
         composeRule.onNodeWithTag("nav-agenda").assert(hasText("日程"))
         composeRule.onNodeWithTag("nav-targets").assert(hasText("目标树"))
         composeRule.onNodeWithTag("nav-statistics").assert(hasText("统计"))
+        composeRule.onNodeWithTag("nav-chat").assert(hasText("对话"))
 
         // 选中态有可访问语义，不只靠颜色传达
         val selected = composeRule.onNodeWithTag("nav-agenda")
